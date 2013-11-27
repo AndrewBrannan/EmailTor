@@ -1,15 +1,19 @@
 #!/usr/bin/python
 
-import csv, email, imaplib, subprocess
+import getpass, email, imaplib, subprocess, transmissionrpc
 
 magnetURLs = []
 
 user = 'ab.rasp.pi'
-pwd = 'raspberrypi'
+
+ip = '192.168.1.105'
+port = 9091
+
+mediaDirectory = '/home/pi/media/'
 
 m = imaplib.IMAP4_SSL("imap.gmail.com")
 print 'Logging into Gmail'
-m.login(user,pwd)
+m.login(user,getpass.getpass())
 m.select('[Gmail]/All Mail')
 
 resp, items = m.search(None, "(UNSEEN)")
@@ -26,14 +30,21 @@ if len(items) > 0:
 				if url[:6] == 'magnet':
 					print 'Magnet link found!'
 					magnetURLs.append(url)
-
-	for link in magnetURLs:
-		print 'Adding link: ' + link
-		subprocess.call(['transmission-remote','-a',link])
 else:
 	print 'No new emails.'
 
-currTors = str(subprocess.call(['transmission-remote','-l']))
-print currTors.strip().split('\t')
+tc = transmissionrpc.Client(ip,port=port)
+if len(magnetURLs) > 0:
+    for url in magnetURLs:
+        tc = transmissionrpc.Client(ip,port=port)
+        torrent = tc.add_torrent(url,timeout=None)
+        print 'Added torrent: '+ torrent.name
 
+currTorrents = tc.get_torrents()
+
+for torrent in currTorrents:
+    if torrent.percentDone >= 1:
+        print 'Torrent: ' + torrent.name + ' completed.  Moving to ' + mediaDirectory + ' and removing from list.'
+        torrent.move_data(mediaDirectory, timeout=None)
+        tc.remove_torrent(torrent.id,delete_data=False,timeout=None)
 
